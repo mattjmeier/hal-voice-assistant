@@ -1,0 +1,81 @@
+[project]
+name = "hal-voice-assistant"
+version = "0.1.0"
+description = "A hardware-agnostic HAL 9000 voice satellite for Raspberry Pi and Linux SBCs"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+authors = [{ name = "Matt Meier" }]
+dependencies = [
+    "gpiozero>=2.0,<3; sys_platform == 'linux'",
+    "lgpio==0.2.2.0; sys_platform == 'linux'",
+    "PyAudio==0.2.14",
+    "openwakeword==0.6.0",
+    "python-dotenv>=1.0,<2",
+    "requests>=2.31,<3",
+    "websocket-client>=1.7,<2",
+]
+
+[project.scripts]
+hal-voice-assistant = "hal.main:main"
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["hal"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-aarch64", "linux-64", "win-64"]
+
+[tool.pixi.system-requirements]
+libc = { family = "glibc", version = "2.36" }
+
+[tool.pixi.dependencies]
+pip = ">=25,<27"
+portaudio = ">=19.7,<20"
+python = "3.11.*"
+
+# Do not add conda's c-compiler here: PyAudio mixes its sysroot with /usr/include.
+[tool.pixi.target.linux-aarch64.dependencies]
+lgpio = "0.2.2.0.*"
+
+[tool.pixi.target.linux-64.dependencies]
+lgpio = "0.2.2.0.*"
+
+[tool.pixi.pypi-dependencies]
+hal_voice_assistant = { path = ".", editable = true }
+
+[tool.pixi.feature.dev.dependencies]
+black = ">=24,<27"
+ruff = ">=0.9,<1"
+
+[tool.pixi.feature.dev.tasks]
+format = "black ."
+lint = "ruff check ."
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+
+[tool.pixi.tasks]
+list-audio = "python scripts/list_audio_devices.py"
+start = "hal-voice-assistant"
+test-audio-playback = "python scripts/test_audio_playback.py"
+test-audio-record = "python scripts/test_audio_record.py"
+test-gpio = "python scripts/test_gpio_lights.py"
+test-ha = "python scripts/test_ha_conversation.py"
+test-mic = "python scripts/test_mic_level.py"
+test-wakeword = "python scripts/test_wakeword.py"
+test = "python -m unittest discover -s tests"
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

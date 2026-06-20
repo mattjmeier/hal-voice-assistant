@@ -1,3 +1,4 @@
 .env
+.pixi/
 .venv
 __pycache__/

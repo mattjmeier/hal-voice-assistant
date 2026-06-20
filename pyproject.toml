@@ -9,7 +9,7 @@ dependencies = [
     "gpiozero>=2.0,<3; sys_platform == 'linux'",
     "lgpio==0.2.2.0; sys_platform == 'linux'",
     "PyAudio==0.2.14",
-    "pvporcupine==3.0.5",
+    "openwakeword==0.6.0",
     "python-dotenv>=1.0,<2",
     "requests>=2.31,<3",
     "websocket-client>=1.7,<2",
@@ -71,6 +71,7 @@ test-gpio = "python scripts/test_gpio_lights.py"
 test-ha = "python scripts/test_ha_conversation.py"
 test-mic = "python scripts/test_mic_level.py"
 test-wakeword = "python scripts/test_wakeword.py"
+test = "python -m unittest discover -s tests"
 
 [tool.black]
 line-length = 100

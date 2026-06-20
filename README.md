@@ -93,6 +93,23 @@ PulseAudio, or PipeWire integration.
 Use `python scripts/list_audio_devices.py` to see indexes, channel counts, sample rates, and
 default devices. Use `python scripts/test_mic_level.py` to tune `SILENCE_RMS_THRESHOLD`.
 
+## Wake-word model
+
+Wake-word detection runs locally with
+[openWakeWord](https://github.com/dscripka/openWakeWord) and does not require an account or
+access key. HAL expects a 16 kHz openWakeWord ONNX model. Place a model trained for "Hey HAL" at
+`models/openwakeword/hey-hal.onnx`, or point `OPENWAKEWORD_MODEL_PATH` at another ONNX model.
+The container mounts the checkout's `models` directory read-only so a locally supplied model is
+available inside the published image.
+
+The old Porcupine `.ppn` file is not reusable with openWakeWord. Use openWakeWord's upstream
+training notebook or workflow to create the replacement model, and keep its source and license
+with the artifact. Upstream's bundled pre-trained models are CC BY-NC-SA 4.0, while the runtime
+code is Apache 2.0; do not redistribute a downloaded model without checking its own terms.
+
+`OPENWAKEWORD_THRESHOLD` defaults to `0.5`. Raise it to reduce false activations or lower it to
+reduce missed activations. Use `python scripts/test_wakeword.py` for room-level testing.
+
 ## LED notes
 
 The light controller uses BCM GPIO numbering. Red and white channels are both optional, but at
@@ -143,9 +160,8 @@ privileged mode. The root filesystem is read-only; transient recordings live in 
 The restart policy brings the existing container back after Docker starts on reboot.
 
 Edit `.env` before starting HAL. Set input/output indexes or name hints, backend service URLs,
-GPIO pins, and a Picovoice access key. The included Raspberry Pi Porcupine v3 model is an
-example. Porcupine models must match both the runtime major version and the machine platform;
-amd64 users must supply a compatible model or set `WAKEWORD_DISABLED=true`.
+GPIO pins, and `OPENWAKEWORD_MODEL_PATH`. Supply a compatible ONNX model as described above, or
+set `WAKEWORD_DISABLED=true` for interactive development without wake-word detection.
 
 Stop the main service before running hardware diagnostics so two processes do not claim the
 same audio or GPIO device:
@@ -227,7 +243,7 @@ raw mono 16-bit PCM from Piper, and plays it locally at `TTS_SAMPLE_RATE`.
 
 ## Development mode
 
-To develop without GPIO or a Picovoice key:
+To develop without GPIO or a wake-word model:
 
 ```env
 WAKEWORD_DISABLED=true

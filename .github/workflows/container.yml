@@ -25,7 +25,8 @@ jobs:
           environments: dev
           locked: true
       - run: pixi run --environment dev lint
-      - run: pixi run --environment dev python -c "from hal.config import Config; import pyaudio, pvporcupine, requests, websocket; Config.load()"
+      - run: pixi run --environment dev test
+      - run: pixi run --environment dev python -c "from hal.config import Config; import openwakeword, pyaudio, requests, websocket; Config.load()"
 
   smoke:
     name: Smoke (${{ matrix.platform }})
@@ -53,7 +54,7 @@ jobs:
         run: >-
           docker run --rm --entrypoint python
           hal-voice-assistant:smoke-${{ matrix.suffix }}
-          -c "from hal.config import Config; import lgpio, pyaudio, pvporcupine, requests, websocket; Config.load()"
+          -c "from hal.config import Config; import lgpio, openwakeword, pyaudio, requests, websocket; Config.load()"
       - name: Handle SIGTERM cleanly
         shell: bash
         run: |

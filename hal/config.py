@@ -38,8 +38,8 @@ class Config:
     name: str
     log_level: str
     wakeword_disabled: bool
-    picovoice_key: str
-    picovoice_model_path: str
+    openwakeword_model_path: Path
+    openwakeword_threshold: float
     audio_backend: str
     audio_input_device_index: int | None
     audio_output_device_index: int | None
@@ -89,8 +89,12 @@ class Config:
             name=os.getenv("HAL_NAME", "hal-office").strip(),
             log_level=os.getenv("HAL_LOG_LEVEL", "INFO").strip().upper(),
             wakeword_disabled=_bool("WAKEWORD_DISABLED", False),
-            picovoice_key=os.getenv("PICOVOICE_KEY", "").strip(),
-            picovoice_model_path=os.getenv("PICOVOICE_MODEL_PATH", "").strip(),
+            openwakeword_model_path=Path(
+                os.getenv(
+                    "OPENWAKEWORD_MODEL_PATH", "models/openwakeword/hey-hal.onnx"
+                ).strip()
+            ),
+            openwakeword_threshold=_float("OPENWAKEWORD_THRESHOLD", 0.5),
             audio_backend=os.getenv("AUDIO_BACKEND", "pyaudio").strip().lower(),
             audio_input_device_index=_optional_int("AUDIO_INPUT_DEVICE_INDEX"),
             audio_output_device_index=_optional_int("AUDIO_OUTPUT_DEVICE_INDEX"),
@@ -147,6 +151,10 @@ class Config:
             raise ValueError("AUDIO_BACKEND currently supports only pyaudio")
         if self.audio_channels != 1:
             raise ValueError("AUDIO_CHANNELS must be 1; HAL currently uses mono PCM")
+        if self.wake_sample_rate != 16000:
+            raise ValueError("WAKE_SAMPLE_RATE must be 16000 for openWakeWord")
+        if not 0 <= self.openwakeword_threshold <= 1:
+            raise ValueError("OPENWAKEWORD_THRESHOLD must be between 0 and 1")
         if self.min_record_seconds > self.max_record_seconds:
             raise ValueError("MIN_RECORD_SECONDS cannot exceed MAX_RECORD_SECONDS")
         for name, value in (

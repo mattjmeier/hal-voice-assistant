@@ -58,14 +58,16 @@ jobs:
       - name: Handle SIGTERM cleanly
         shell: bash
         run: |
+          # Dependency imports are checked above; keep QEMU-slow ONNX initialization out of this test.
           container_id=$(docker run --detach \
             --env LIGHT_BACKEND=null \
             --env NETWORK_TIMEOUT_SECONDS=1 \
+            --env OPENWAKEWORD_MODEL_PATH=/nonexistent \
             --env PIPER_URL=http://127.0.0.1:9 \
             --env WAKEWORD_DISABLED=false \
             hal-voice-assistant:smoke-${{ matrix.suffix }})
           sleep 2
-          docker stop --time 10 "$container_id"
+          docker stop --timeout 10 "$container_id"
           test "$(docker inspect --format '{{.State.ExitCode}}' "$container_id")" = "0"
           docker rm "$container_id"
 

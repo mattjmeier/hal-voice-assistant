@@ -37,15 +37,12 @@ pip = ">=25,<27"
 portaudio = ">=19.7,<20"
 python = "3.11.*"
 
+# Do not add conda's c-compiler here: PyAudio mixes its sysroot with /usr/include.
 [tool.pixi.target.linux-aarch64.dependencies]
-c-compiler = "*"
 lgpio = "0.2.2.0.*"
-pkg-config = "*"
 
 [tool.pixi.target.linux-64.dependencies]
-c-compiler = "*"
 lgpio = "0.2.2.0.*"
-pkg-config = "*"
 
 [tool.pixi.pypi-dependencies]
 hal_voice_assistant = { path = ".", editable = true }

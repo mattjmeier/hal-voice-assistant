@@ -1,5 +1,10 @@
 FROM ghcr.io/prefix-dev/pixi:0.70.2 AS build
 
+# PyAudio hard-codes system include paths, so build it with the matching system toolchain.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY pyproject.toml pixi.lock README.md ./

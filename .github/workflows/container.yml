@@ -82,7 +82,9 @@ jobs:
           # installed its signal handlers before asking Docker to stop the container.
           ready=false
           for _ in {1..60}; do
-            if docker logs "$container_id" 2>&1 | grep --quiet "Starting "; then
+            # Do not use grep --quiet here: with the runner's pipefail setting it can
+            # close the pipe early and make `docker logs` report a false failure.
+            if docker logs "$container_id" 2>&1 | grep --fixed-strings "Starting " >/dev/null; then
               ready=true
               break
             fi

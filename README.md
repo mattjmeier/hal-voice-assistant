@@ -86,8 +86,9 @@ USB audio dongle, or use a USB mic, headset, speakerphone, or webcam mic.
 
 Audio input and output are resolved independently. An explicit device index wins, followed by
 a case-insensitive device name hint, then the PyAudio default. Indexes may change after a reboot,
-so name hints are usually more durable. Bluetooth can work, but USB or wired output is a better
-choice for the first reliable build.
+so name hints are usually more durable. The container deployment supports direct ALSA devices
+such as USB, HDMI, and Pi analog output. Use the native Pixi deployment for Bluetooth,
+PulseAudio, or PipeWire integration.
 
 Use `python scripts/list_audio_devices.py` to see indexes, channel counts, sample rates, and
 default devices. Use `python scripts/test_mic_level.py` to tune `SILENCE_RMS_THRESHOLD`.
@@ -120,37 +121,75 @@ Pi GND connected to external supply GND
 Choose the resistor from supply voltage, LED forward voltage, and desired current. Do not
 connect a high-current load directly to a GPIO pin.
 
-## Setup
+## Container setup
 
-On Raspberry Pi OS or Debian Linux:
+The supported appliance target is Raspberry Pi OS Lite 64-bit on a Pi 3B+ or newer. ARMv7 and
+32-bit Raspberry Pi OS images are not supported. Install Docker Engine and the Compose plugin
+using the [official Debian instructions](https://docs.docker.com/engine/install/debian/), then:
 
 ```bash
-sudo apt update
-sudo apt install -y python3-venv python3-pip portaudio19-dev libasound2-dev alsa-utils git
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/mattjmeier/hal-voice-assistant.git
+cd hal-voice-assistant
 cp .env.example .env
-python scripts/list_audio_devices.py
-python scripts/test_mic_level.py
-python scripts/test_audio_record.py
-python scripts/test_audio_playback.py
-python scripts/test_gpio_lights.py
-python app.py
+# Edit .env before continuing.
+docker compose pull
+docker compose up -d
+docker compose logs -f
 ```
 
-Edit `.env` before running the tests. Set input/output indexes or name hints, backend service
-URLs, GPIO pins, and a Picovoice access key/model path. The included custom model is an example;
-Porcupine models must match the platform/runtime version in use.
+Compose pulls `ghcr.io/mattjmeier/hal-voice-assistant:${HAL_IMAGE_TAG:-latest}`, uses host
+networking, and passes only `/dev/snd` and `/dev/gpiochip0` into the container. It does not use
+privileged mode. The root filesystem is read-only; transient recordings live in a `/tmp` tmpfs.
+The restart policy brings the existing container back after Docker starts on reboot.
 
-Useful diagnostics:
+Edit `.env` before starting HAL. Set input/output indexes or name hints, backend service URLs,
+GPIO pins, and a Picovoice access key. The included Raspberry Pi Porcupine v3 model is an
+example. Porcupine models must match both the runtime major version and the machine platform;
+amd64 users must supply a compatible model or set `WAKEWORD_DISABLED=true`.
+
+Stop the main service before running hardware diagnostics so two processes do not claim the
+same audio or GPIO device:
 
 ```bash
-python scripts/test_audio_record.py --seconds 5 --output /tmp/hal_test.wav
-python scripts/test_audio_playback.py /tmp/hal_test.wav
-python scripts/test_wakeword.py
-python scripts/test_ha_conversation.py "turn on the office light"
+docker compose down
+docker compose run --rm --entrypoint python hal scripts/list_audio_devices.py
+docker compose run --rm --entrypoint python hal scripts/test_mic_level.py
+docker compose run --rm --entrypoint python hal scripts/test_audio_record.py --seconds 5 --output /tmp/hal_test.wav
+docker compose run --rm --entrypoint python hal scripts/test_audio_playback.py /tmp/hal_test.wav
+docker compose run --rm --entrypoint python hal scripts/test_gpio_lights.py
+docker compose run --rm --entrypoint python hal scripts/test_wakeword.py
 ```
+
+The image is also published for `linux/amd64`. To build a fork locally instead, use:
+
+```bash
+docker build -t ghcr.io/mattjmeier/hal-voice-assistant:local .
+HAL_IMAGE_TAG=local docker compose up -d
+```
+
+## Native Pixi setup
+
+Pixi is the native fallback and uses the same locked environment as the image. On Raspberry Pi
+OS or Debian Linux, install `git`, `alsa-utils`, and
+[Pixi](https://pixi.sh/latest/installation/), then run:
+
+```bash
+git clone https://github.com/mattjmeier/hal-voice-assistant.git
+cd hal-voice-assistant
+pixi install --locked
+cp .env.example .env
+# Edit .env before continuing.
+pixi run list-audio
+pixi run test-mic
+pixi run test-audio-record --seconds 5 --output /tmp/hal_test.wav
+pixi run test-audio-playback /tmp/hal_test.wav
+pixi run test-gpio
+pixi run test-wakeword
+pixi run start
+```
+
+The lock covers `linux-aarch64`, `linux-64`, and `win-64`. Windows development should use
+`LIGHT_BACKEND=null`. Run `pixi run --environment dev lint` for static checks.
 
 ## Home Assistant setup
 
@@ -196,21 +235,39 @@ LIGHT_BACKEND=null
 OUTPUT_WAV_PATH=hal_prompt.wav
 ```
 
-Run `python app.py` and press Enter to simulate a wake word. Network services and an audio input
-are still required for a complete interaction. The null backend logs state changes and never
-imports GPIO libraries.
+Run `pixi run start` and press Enter to simulate a wake word. Network services and an audio
+input are still required for a complete interaction. The null backend logs state changes and
+never imports GPIO libraries.
 
 ## Service installation
 
-The sample unit assumes a production checkout at `/opt/hal-voice-assistant`. Development can
-remain anywhere. If you use another production path or Linux user, edit the unit first.
+The native sample unit assumes a Pixi-installed production checkout at
+`/opt/hal-voice-assistant`. Development can remain anywhere. If you use another production path
+or Linux user, edit the unit first.
 
 ```bash
+# Clone or copy the repository to /opt/hal-voice-assistant, create .env, and run
+# `pixi install --locked` as user pi before installing the unit.
 sudo cp systemd/hal-voice-assistant.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now hal-voice-assistant
 sudo journalctl -u hal-voice-assistant -f
 ```
+
+## Automation contract
+
+Ansible is not required or maintained in this repository. Any deployment tool only needs to:
+
+1. Provide a 64-bit Linux host with Docker Engine and Compose.
+2. Place `compose.yaml` and a mode-`0600` `.env` file on the host.
+3. Ensure `/dev/snd` and `/dev/gpiochip0` exist.
+4. Select an immutable release tag with `HAL_IMAGE_TAG` for reproducible deployments.
+5. Run `docker compose pull` followed by `docker compose up -d`.
+
+Pushes to `main` publish `edge` and `sha-<commit>` tags. Tags matching `vX.Y.Z` publish semantic
+version tags and `latest`. Production automation should pin a semantic version or commit tag
+rather than `latest`. After the first publish, set the GHCR package visibility to public in its
+GitHub package settings so unauthenticated machines can pull it.
 
 ## Future hooks
 

@@ -1,7 +1,0 @@
-requests
-pyaudio
-python-dotenv
-pvporcupine
-websocket-client
-gpiozero
-lgpio

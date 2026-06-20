@@ -1,8 +1,8 @@
 import argparse
-from dataclasses import replace
-from pathlib import Path
 import time
 import wave
+from dataclasses import replace
+from pathlib import Path
 
 import _bootstrap  # noqa: F401
 

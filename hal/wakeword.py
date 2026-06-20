@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from array import array
 import logging
 import threading
+from array import array
 
 from hal.audio import _pyaudio, _resolve_device
 from hal.config import Config

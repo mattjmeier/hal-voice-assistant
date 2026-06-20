@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from array import array
 import logging
 import math
-from pathlib import Path
 import subprocess
 import time
 import wave
+from array import array
+from pathlib import Path
 
 from hal.config import Config
 

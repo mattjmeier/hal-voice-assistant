@@ -7,7 +7,8 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/hal-voice-assistant
 EnvironmentFile=/opt/hal-voice-assistant/.env
-ExecStart=/opt/hal-voice-assistant/.venv/bin/python app.py
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hal-voice-assistant/.pixi/envs/default/bin/hal-voice-assistant
 Restart=on-failure
 RestartSec=5
 User=pi

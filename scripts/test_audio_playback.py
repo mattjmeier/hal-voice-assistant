@@ -1,9 +1,9 @@
 import argparse
-from itertools import chain
 import math
-from pathlib import Path
 import struct
 import wave
+from itertools import chain
+from pathlib import Path
 
 import _bootstrap  # noqa: F401
 

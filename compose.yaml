@@ -1,0 +1,18 @@
+services:
+  hal:
+    image: ghcr.io/mattjmeier/hal-voice-assistant:${HAL_IMAGE_TAG:-latest}
+    env_file:
+      - .env
+    network_mode: host
+    devices:
+      - /dev/snd:/dev/snd
+      - /dev/gpiochip0:/dev/gpiochip0
+    user: "0:0"
+    privileged: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    stop_grace_period: 15s

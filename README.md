@@ -1,249 +1,219 @@
-# Hal 9000 Voice Assistant
+# HAL 9000 Voice Satellite
 
-<table>
-  <tr>
-    <td width="33%">
-      <img src="assets/image9.JPG" width="100%"/>
-    </td>
-    <td>
-      <p>
-        A voice-activated AI assistant modeled after HAL 9000 from <em>2001: A Space Odyssey</em>.
-      </p>
-      <p>
-        The assistant is built using a Raspberry Pi Zero 2 W, integrated with dual microphones, a speaker, and status LEDs - all housed within a 1:1 scale HAL 9000 model kit.
-      </p>
-      <p>
-        The system activates on the wake phrase “Hey HAL” using <a href="https://github.com/Picovoice/porcupine">Porcupine</a> for local wake word detection and processes spoken input using fully self-hosted services for speech-to-text (<a href="https://github.com/alphacep/vosk-server">Vosk</a>), language generation (<a href="https://github.com/ollama/ollama">Ollama</a>), and text-to-speech (<a href="https://github.com/rhasspy/piper">Piper</a>). The text-to-speech voice is custom-trained using samples from the film to closely match HAL’s original tone.
-      </p>
-      <p>
-        A demo of the voice assistant can be viewed <a href="#demo">here</a>.
-      </p>
-    </td>
-  </tr>
-</table>
+## What this is
 
-## Table of Contents
-- [Project Overview](#project-overview)
-  - [Hardware](#hardware)
-  - [Software](#software)
-  - [How it Works](#how-it-works)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Demo](#demo)
-- [Model Assembly](#model-assembly)
-- [Notes](#notes)
+This project is a fork of
+[campwill/hal-voice-assistant](https://github.com/campwill/hal-voice-assistant), adapted into a
+small, hardware-agnostic HAL 9000 voice satellite for Raspberry Pi and other Linux SBCs. The
+satellite detects a wake word, records and plays audio, controls simple GPIO lighting, and calls
+services on your network. Compute-heavy STT, LLM, TTS, automation, and future
+recognition/orchestration workloads stay on Home Assistant or a homelab server.
 
-## Project Overview
+The primary target is a Raspberry Pi 3B+, but there are no Pi-model, ReSpeaker, Pico W, MQTT,
+or fixed audio-index assumptions. A Pi Zero 2 W, Pi 3A+, Pi 4, another Linux SBC, or a Linux
+development machine can use the same client. Development machines should use null lighting.
 
-This project combines the following hardware and software components:
+## Fork lineage and direction
 
-### Hardware
+This fork builds directly on campwill's original HAL 9000 project and physical build. The
+original project established the core interaction flow—Porcupine wake-word detection, local
+recording and playback, and network-hosted Vosk, Ollama, and Piper services—and demonstrated it
+in a wonderfully convincing HAL enclosure. That work remains the foundation of this project,
+and the original repository is the best place to see the build that inspired it.
 
-- [**Raspberry Pi Zero 2 W**](https://www.raspberrypi.com/products/raspberry-pi-zero-2-w/) - The voice assistant's main computer. Runs the Python assistant script and handles communication with STT/LLM/TTS services via local network.
-- [**ReSpeaker 2-Mics Pi Hat**](https://www.seeedstudio.com/ReSpeaker-2-Mics-Pi-HAT.html?srsltid=AfmBOooVBplsE1S27Ix879C-gS0P7OQUHIdzmybpualjSxRoyzHZtlWk) - Provides two onboard microphones, a JST 2.0 speaker output, and three programmable LEDs.
-- [**adafruit Mono Enclosed Speaker (1W 8 Ohm)**](https://www.adafruit.com/product/5986) - Compatible speaker with JST 2.0 connector, used for audio output.
-- [**Moebius Models HAL 9000 1:1 Scale Model Kit**](https://a.co/d/a20T0uZ) - Enclosure used to house hardware, modeled after HAL 9000 from *2001: A Space Odyssey*.
-- **Homelab Server** – Hosts all compute-heavy services (speech-to-text, language generation, and text-to-speech) over the LAN. Provides fast, local, offline processing with no reliance on cloud services.  
-  - **OS:** Proxmox VE running Ubuntu Server VM  
-  - **CPU:** Intel Core i5-8400  
-  - **RAM:** 16 GB DDR4  
-  - **GPU:** NVIDIA GeForce GTX 1060 6GB (used for LLM acceleration and Piper TTS training)  
-  - **Storage:** 50 GB SSD allocated to VM  
+The purpose of this fork is to preserve that character and working direct-service flow while
+making the software easier to adapt and extend. In particular, this fork aims to:
 
-### Software
+- support generic Linux audio devices instead of requiring a ReSpeaker HAT or fixed indexes;
+- support Raspberry Pi models and other Linux SBCs without model-specific assumptions;
+- split the original single-file application into small configuration, audio, wake-word,
+  lighting, STT, conversation, and TTS modules;
+- drive GPIO lighting from explicit assistant states, with a null backend for development;
+- add Home Assistant conversation support alongside the original direct Vosk/Ollama/Piper mode;
+- provide diagnostic scripts, environment-based configuration, service deployment, and clear
+  hardware guidance; and
+- leave clean extension points for future Assist pipeline, orchestration, camera, and lighting
+  features without moving heavy inference onto the satellite.
 
-- [**Porcupine**](https://github.com/Picovoice/porcupine) - Used for "Hey Hal" wake word detection, which runs locally on the Raspberry Pi Zero 2 W.
-- [**Vosk**](https://github.com/alphacep/vosk-server) - Speech-to-text server used to transcribe recorded voice input into text.
-- [**Ollama**](https://github.com/ollama/ollama) - Runs the LLM used for generating responses.
-  - It uses the latest [llama3](https://ollama.com/library/llama3) model, featuring 8 billion parameters.
-- [**Piper**](https://github.com/rhasspy/piper) - Text-to-speech engine that converts text into audible speech in real-time. Also used to train a Hal 9000 text-to-speech model using audio samples from the film.
-  - The HAL 9000 .onnx speech-to-text model can be found on my [HuggingFace](https://huggingface.co/campwill/HAL-9000-Piper-TTS), along with its corresponding [dataset](https://huggingface.co/datasets/campwill/HAL-9000-Speech).
+This is an evolution of the original idea, not a claim of independent origin. Thanks to
+[campwill](https://github.com/campwill) for publishing the project and making this fork possible.
 
-### How it Works
+## Architecture
 
-The voice assistant is driven by a sequence of self-hosted services, coordinated through a Python script (`app.py`) running on a Raspberry Pi Zero 2 W.
-
-The assistant runs continuously in a listening state, waiting for the wake phrase “Hey HAL.” Wake word detection is handled locally on the Raspberry Pi using Porcupine. When the phrase is recognized, the system begins actively recording voice input until a silence threshold is met. The recorded audio is then sent over the local network to my homelab server, where it is first transcribed by a speech-to-text service (Vosk). The transcribed text is then passed to a large language model (Ollama), which generates a textual response. This response is then sent to a text-to-speech engine (Piper), which synthesizes speech audio. The audio is streamed back to the Raspberry Pi and played through the speaker, enabling a fully self-hosted, offline voice interaction.
-
-The process is illustrated below:
-
-```mermaid
-sequenceDiagram
-    autonumber
-
-    participant User
-    participant WakeWord as Wake Word Detection<br>(Porcupine)
-    participant Assistant as Voice Assistant 
-    participant STT as Speech-to-Text<br>(Vosk)
-    participant LLM as Large Language Model<br>(Ollama)
-    participant TTS as Text-to-Speech<br>(Piper)
-
-    User->>WakeWord: Speak wake word ("Hey HAL")
-    WakeWord-->>Assistant: Detect wake word
-    Assistant-->>User: Turn LED on
-    Assistant->>Assistant: Start recording for user input
-    User->>Assistant: Speak voice input
-    Assistant->>Assistant: Detect silence
-    Assistant->>STT: Send audio for transcription
-    STT-->>Assistant: Return transcribed text
-    Assistant->>LLM: Send transcribed text to LLM
-    LLM-->>Assistant: Return LLM text response
-    Assistant->>TTS: Send LLM text response for speech synthesis
-    TTS-->>Assistant: Stream synthesized audio
-    Assistant-->>User: Play response through speaker
-    Assistant-->>User: Turn LED off
+```text
+HAL Pi / Linux SBC
+  - wake word
+  - USB mic / speaker
+  - GPIO LEDs
+  - local recording/playback
+        |
+        | HTTP / WebSocket
+        v
+Home Assistant + homelab services
+  - conversation agent
+  - automations
+  - thermostat/lights/entities
+  - Vosk STT
+  - Piper TTS
+  - Ollama / GPU LLM
 ```
 
-## Prerequisites
+Two modes are supported:
 
-Before setting up the assistant, ensure the following conditions are met:
+- `direct`: Vosk STT -> Ollama -> Piper TTS.
+- `home_assistant_conversation`: Vosk STT -> Home Assistant conversation API -> Piper TTS.
 
-- A Raspberry Pi Zero 2 W is set up and connected to the same local network as your server.
-- A ReSpeaker 2-Mics Pi Hat is correctly installed and initialized on the Raspberry Pi. Follow the driver setup instructions for the hat on seeed studio's [website](https://wiki.seeedstudio.com/ReSpeaker_2_Mics_Pi_HAT_Raspberry/).
-- A separate computer or server must be available on the same network to host the required backend services:
+The Home Assistant Assist audio pipeline WebSocket mode is intentionally left for a later pass.
 
-### Vosk
+## Recommended hardware
 
-The easiest way to run Vosk is by running the WebSocket server using Docker:
+- Raspberry Pi 3B+ or similar Linux SBC, microSD card, and suitable 5 V power supply
+- USB microphone, USB headset, USB speakerphone, webcam mic, or USB audio dongle
+- Speaker output over USB, HDMI, Pi analog audio out, or Bluetooth
+- One red LED and suitable resistor for HAL's eye
+- Optional white LEDs with an appropriate driver circuit
+- Optional camera for future server-side recognition
 
-```bash
-docker run -d -p 2700:2700 alphacep/kaldi-en:latest
+The recommended split setup is a 3.5 mm microphone connected through a USB audio adapter,
+with the Pi 3.5 mm output connected to a powered speaker. A USB speakerphone or USB headset is
+often easiest because it provides standard ALSA/PyAudio input and output in one device.
+
+## Audio notes
+
+Raspberry Pi boards such as the Pi 3B+ do **not** have a native analog microphone input. A
+plain 3.5 mm analog microphone will not work in the Pi headphone jack. Connect it through a
+USB audio dongle, or use a USB mic, headset, speakerphone, or webcam mic.
+
+Audio input and output are resolved independently. An explicit device index wins, followed by
+a case-insensitive device name hint, then the PyAudio default. Indexes may change after a reboot,
+so name hints are usually more durable. Bluetooth can work, but USB or wired output is a better
+choice for the first reliable build.
+
+Use `python scripts/list_audio_devices.py` to see indexes, channel counts, sample rates, and
+default devices. Use `python scripts/test_mic_level.py` to tune `SILENCE_RMS_THRESHOLD`.
+
+## LED notes
+
+The light controller uses BCM GPIO numbering. Red and white channels are both optional, but at
+least one must be configured when `LIGHT_BACKEND=gpio`. PWM provides dimming and pulse effects;
+plain digital LEDs approximate pulses with blinking. Every effect follows assistant state and
+runs in one replaceable background animation.
+
+Raspberry Pi GPIO pins are 3.3 V logic pins. Use GPIO for signal/control; do not power
+high-current LEDs, multiple bright LEDs, or LED strips directly from GPIO.
+
+For one small indicator LED:
+
+```text
+GPIO pin -> suitable series resistor -> LED anode
+LED cathode -> GND
 ```
 
-More information for running the server can be found on the [official documentation](https://alphacephei.com/vosk/server) for Vosk. Ensure Vosk is running the WebSocket server on port 2700.
+For a brighter load or an external 5 V/12 V supply:
 
-### Ollama
-
-Ollama can be installed using the following command:
-
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
+```text
+GPIO pin -> resistor -> MOSFET/transistor gate/base
+external supply -> LED/resistor/load -> MOSFET/transistor -> GND
+Pi GND connected to external supply GND
 ```
 
-By default, Ollama runs on port 11434. Once Ollama is installed, you will need to run a large language model of your choosing. For this project, I used the latest [llama3](https://ollama.com/library/llama3) model, featuring 8 billion parameters.
+Choose the resistor from supply voltage, LED forward voltage, and desired current. Do not
+connect a high-current load directly to a GPIO pin.
+
+## Setup
+
+On Raspberry Pi OS or Debian Linux:
 
 ```bash
-ollama run llama3:latest
-```
-
-If you decide to use a different model, you will need to change the `OLLAMA_MODEL` constant in `app.py`.
-
-### Piper
-
-To set up the Piper Python HTTP server, I recommend following Thorsten-Voice's tutorial on [YouTube](https://www.youtube.com/watch?app=desktop&v=pLR5AsbCMHs). He provides excellent resources for setting up a Piper TTS environment, as well as training your own voices. More information on Piper can be found on their [GitHub](https://github.com/rhasspy/piper). Ensure Piper is running the HTTP server on port 5000. 
-
-If you'd like to use a custom text-to-speech model, you can run the HTTP server with my custom HAL 9000 model, available on my [HuggingFace](https://huggingface.co/campwill/HAL-9000-Piper-TTS) page. Alternatively, you can train your own model using the corresponding [dataset](https://huggingface.co/datasets/campwill/HAL-9000-Speech).
-
-## Installation
-
-With all the services running on their respective ports (Vosk, Ollama, and Piper), the Raspberry Pi client can be set up.
-
-### 1. Clone the Repository
-
-```bash
-clone https://github.com/campwill/hal-voice-assistant.git
-cd hal-voice-assistant
-```
-
-### 2. Set Up Python Virtual Environment
-
-Create the virtual environment and install all the required dependencies.
-
-```bash
+sudo apt update
+sudo apt install -y python3-venv python3-pip portaudio19-dev libasound2-dev alsa-utils git
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 3. Configure Audio Device
-
-In `app.py`, set the correct device index for your ReSpeaker 2-Mics Pi Hat:
-
-```python
-RESPEAKER_INDEX = 1 # Change to your specific device index
-```
-
-To find the device index for your audio device:
-
-```bash
-arecord -l
-```
-
-### 4. Create a `.env` File
-Create a .env file in the root of the project:
-
-```bash
-nano .env
-```
-```env
-PICOVOICE_KEY=your_picovoice_api_key
-PICOVOICE_MODEL_PATH=/absolute/path/to/your/model.ppn
-```
-Get your Picovoice API key and your Porcupine wake word model (.ppn) from [Picovoice Developer Console](https://console.picovoice.ai/login).
-
-### 5. Run the Voice Assistant
-```bash
+cp .env.example .env
+python scripts/list_audio_devices.py
+python scripts/test_mic_level.py
+python scripts/test_audio_record.py
+python scripts/test_audio_playback.py
+python scripts/test_gpio_lights.py
 python app.py
 ```
-The Python script can be ran as a service to start automatically once the Raspberry Pi turns on. More information about running scripts on startup can be found [here](https://www.dexterindustries.com/howto/run-a-program-on-your-raspberry-pi-at-startup/#systemd).
 
-## Demo
+Edit `.env` before running the tests. Set input/output indexes or name hints, backend service
+URLs, GPIO pins, and a Picovoice access key/model path. The included custom model is an example;
+Porcupine models must match the platform/runtime version in use.
 
-<div align="center">
-  <video src="https://github.com/user-attachments/assets/67f65348-41fb-4b91-9165-7fa656c89429">
-    Your browser does not support the video tag.
-  </video>
-</div>
+Useful diagnostics:
 
-## Model Assembly
+```bash
+python scripts/test_audio_record.py --seconds 5 --output /tmp/hal_test.wav
+python scripts/test_audio_playback.py /tmp/hal_test.wav
+python scripts/test_wakeword.py
+python scripts/test_ha_conversation.py "turn on the office light"
+```
 
-For the physical enclosure of my voice assistant, I used the [Moebius Models HAL 9000 1:1 Scale Model Kit](https://a.co/d/a20T0uZ). This kit arrives as a set of unassembled plastic components. I painted the body with Flat Black for the faceplate and Metallic Aluminum for the frame. For the lens components, I used Elmer’s Glue to secure them without fogging or damaging the clear plastic.
+## Home Assistant setup
 
-The speaker grill included in the kit was a solid plastic piece with no perforations. To make it functional, I drilled out all of the holes to allow audio to pass through clearly.
+Create a Home Assistant Long-Lived Access Token and put it in `.env` as `HA_TOKEN`; never commit
+the token. Set `HA_URL` and start with:
 
-Below are some pictures of the assembly process.
+```env
+HAL_MODE=home_assistant_conversation
+HA_URL=http://homeassistant.local:8123
+HA_TOKEN=your-token
+HA_LANGUAGE=en
+HA_CONVERSATION_ID=hal-office
+```
 
-<table align="center" width="100%">
-  <tr align="center">
-    <td>
-      <img src="assets/image1.JPG" width="75%"/>
-    </td>
-    <td>
-      <img src="assets/image2.JPG" width="75%"/>
-    </td>
-    <td>
-      <img src="assets/image3.JPG" width="75%"/>
-    </td>
-  </tr>
-  <tr align="center">
-    <td>
-      <img src="assets/image4.JPG" width="75%"/>
-    </td>
-    <td>
-      <img src="assets/image5.JPG" width="75%"/>
-    </td>
-    <td>
-      <img src="assets/image6.JPG" width="75%"/>
-    </td>
-  </tr>
-</table>
+Home Assistant can route the text through its chosen conversation agent, Ollama integration,
+intents, and automations. Expose only a small, safe set of entities to any LLM/conversation
+agent. `HA_CONVERSATION_ID` should remain stable for a given HAL device so conversations can
+retain context.
 
-I was able to mount the Raspberry Pi in a position where the LED aligned with HAL 9000’s eye. For now, I used cardboard and tape as a temporary solution (I don't own a 3D printer yet). Below are some pictures of the components mounted inside the model kit.
+## Direct mode setup
 
-<table>
-  <tr align="center" width="100%">
-    <td>
-      <img src="assets/image7.JPG" width="50%"/>
-    </td>
-    <td>
-      <img src="assets/image8.JPG" width="50%"/>
-    </td>
-  </tr>
-</table>
+Run Vosk's WebSocket server, Ollama, and a Piper-compatible streaming HTTP server elsewhere,
+then configure their reachable addresses:
 
-## Notes
+```env
+HAL_MODE=direct
+VOSK_URL=ws://server:2700
+OLLAMA_URL=http://server:11434/api/generate
+OLLAMA_MODEL=llama3:latest
+PIPER_URL=http://server:5000
+```
 
-- I hope to shorten the response time by exploring ways to optimize the Vosk STT pipeline, such as reducing silence detection lag or modifying WebSocket handling.
-- Additionally, instead of sending three separate requests to my homelab server, I may create a unified API endpoint that handles the STT, LLM, and TTS stages in a single request to minimize network overhead.
-- The audio for the ReSpeaker 2-Mics Pi Hat has also been giving me issues, especially after the Raspberry Pi reboots. I will be tinkering with the ReSpeaker 2-Mics Pi Hat's audio functionality to see if I can fix the volume issues.
-- I would also like to implement home assistant.
+The Pi records mono 16-bit PCM, sends the WAV to Vosk, sends the transcript to Ollama, streams
+raw mono 16-bit PCM from Piper, and plays it locally at `TTS_SAMPLE_RATE`.
+
+## Development mode
+
+To develop without GPIO or a Picovoice key:
+
+```env
+WAKEWORD_DISABLED=true
+LIGHT_BACKEND=null
+OUTPUT_WAV_PATH=hal_prompt.wav
+```
+
+Run `python app.py` and press Enter to simulate a wake word. Network services and an audio input
+are still required for a complete interaction. The null backend logs state changes and never
+imports GPIO libraries.
+
+## Service installation
+
+The sample unit assumes a production checkout at `/opt/hal-voice-assistant`. Development can
+remain anywhere. If you use another production path or Linux user, edit the unit first.
+
+```bash
+sudo cp systemd/hal-voice-assistant.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hal-voice-assistant
+sudo journalctl -u hal-voice-assistant -f
+```
+
+## Future hooks
+
+Future work belongs behind small interfaces or on a server: Home Assistant Assist pipeline
+WebSocket mode, a Hermes/orchestrator endpoint, camera snapshot capture, server-side face
+recognition, and voice-level LED animation. None of those workloads run locally in this pass.

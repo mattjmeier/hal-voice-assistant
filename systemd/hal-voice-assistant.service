@@ -1,0 +1,17 @@
+[Unit]
+Description=HAL 9000 Voice Assistant
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/hal-voice-assistant
+EnvironmentFile=/opt/hal-voice-assistant/.env
+ExecStart=/opt/hal-voice-assistant/.venv/bin/python app.py
+Restart=on-failure
+RestartSec=5
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target

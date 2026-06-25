@@ -4,7 +4,7 @@ import logging
 import signal
 import threading
 
-from hal.audio import play_pcm_stream, record_until_silence, set_alsa_volume
+from hal.audio import log_audio_devices, play_pcm_stream, record_until_silence, set_alsa_volume
 from hal.config import Config
 from hal.home_assistant import HomeAssistantConversationClient
 from hal.lights import create_lights
@@ -12,7 +12,7 @@ from hal.llm import OllamaClient
 from hal.logging_config import configure_logging
 from hal.state import AssistantState
 from hal.stt import VoskClient
-from hal.tts import PiperClient
+from hal.tts import PiperClient, PiperError
 from hal.wakeword import WakeWordListener
 
 LOGGER = logging.getLogger(__name__)
@@ -45,6 +45,18 @@ def main() -> None:
         lights.set_state(AssistantState.STARTING)
         set_alsa_volume(config)
         LOGGER.info("Starting %s in %s mode", config.name, config.mode)
+        LOGGER.info("Resolved PIPER_URL=%s", config.piper_url)
+        try:
+            LOGGER.info("Piper /info result: %s", tts.get_info())
+        except PiperError as exc:
+            LOGGER.warning("%s", exc)
+        LOGGER.info("Resolved VOSK_URL=%s", config.vosk_url)
+        try:
+            stt.check_connection()
+            LOGGER.info("Vosk connection check succeeded")
+        except RuntimeError as exc:
+            LOGGER.warning("%s", exc)
+        log_audio_devices()
         lights.set_state(AssistantState.IDLE)
 
         while not stop_requested.is_set():
@@ -73,18 +85,23 @@ def main() -> None:
                 LOGGER.info("Assistant response: %s", response_text)
 
                 lights.set_state(AssistantState.SPEAKING)
-                play_pcm_stream(tts.stream_tts(response_text), config.tts_sample_rate, config)
+                speech = tts.synthesize(response_text)
+                play_pcm_stream(speech.chunks, speech.sample_rate, config)
                 lights.set_state(AssistantState.IDLE)
             except KeyboardInterrupt:
                 stop_requested.set()
-            except Exception:
+            except Exception as exc:
                 LOGGER.exception("Recoverable interaction error")
                 lights.set_state(AssistantState.ERROR)
-                try:
-                    error_text = "I'm sorry. I couldn't complete that request."
-                    play_pcm_stream(tts.stream_tts(error_text), config.tts_sample_rate, config)
-                except Exception:
-                    LOGGER.debug("Could not play the error message", exc_info=True)
+                if isinstance(exc, PiperError):
+                    LOGGER.debug("Skipping spoken error message because Piper is unavailable")
+                else:
+                    try:
+                        error_text = "I'm sorry. I couldn't complete that request."
+                        speech = tts.synthesize(error_text)
+                        play_pcm_stream(speech.chunks, speech.sample_rate, config)
+                    except Exception:
+                        LOGGER.debug("Could not play the error message", exc_info=True)
                 stop_requested.wait(1.0)
                 if not stop_requested.is_set():
                     lights.set_state(AssistantState.IDLE)

@@ -90,6 +90,10 @@ so name hints are usually more durable. The container deployment supports direct
 such as USB, HDMI, and Pi analog output. Use the native Pixi deployment for Bluetooth,
 PulseAudio, or PipeWire integration.
 
+HAL logs all PyAudio devices at startup. If the selected microphone cannot open at the
+wake-word or recording rate, HAL tries the device default rate and common hardware rates such
+as 48 kHz, then resamples mono 16-bit PCM to the 16 kHz wake-word/STT rate internally.
+
 Use `python scripts/list_audio_devices.py` to see indexes, channel counts, sample rates, and
 default devices. Use `python scripts/test_mic_level.py` to tune `SILENCE_RMS_THRESHOLD`.
 
@@ -98,7 +102,7 @@ default devices. Use `python scripts/test_mic_level.py` to tune `SILENCE_RMS_THR
 Wake-word detection runs locally with
 [openWakeWord](https://github.com/dscripka/openWakeWord) and does not require an account or
 access key. HAL expects a 16 kHz openWakeWord ONNX model. Place a model trained for "Hey HAL" at
-`models/openwakeword/hey-hal.onnx`, or point `OPENWAKEWORD_MODEL_PATH` at another ONNX model.
+`models/openwakeword/hey_hal.onnx`, or point `OPENWAKEWORD_MODEL_PATH` at another ONNX model.
 The container mounts the checkout's `models` directory read-only so a locally supplied model is
 available inside the published image.
 
@@ -227,7 +231,7 @@ retain context.
 
 ## Direct mode setup
 
-Run Vosk's WebSocket server, Ollama, and a Piper-compatible streaming HTTP server elsewhere,
+Run Vosk's WebSocket server, Ollama, and an OHF Piper HTTP server elsewhere,
 then configure their reachable addresses:
 
 ```env
@@ -238,8 +242,16 @@ OLLAMA_MODEL=llama3:latest
 PIPER_URL=http://server:5000
 ```
 
-The Pi records mono 16-bit PCM, sends the WAV to Vosk, sends the transcript to Ollama, streams
-raw mono 16-bit PCM from Piper, and plays it locally at `TTS_SAMPLE_RATE`.
+These URLs must be reachable from the HAL host. If HAL runs on a Pi and the services run on a
+server, do not use `localhost` for `VOSK_URL`, `OLLAMA_URL`, or `PIPER_URL`.
+
+HAL checks Piper with `GET /info` and synthesizes speech with `POST /synthesize` using JSON
+like `{ "text": "..." }`, matching OHF Piper's
+[HTTP API](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_HTTP.md). Piper returns a
+WAV file; HAL extracts its mono 16-bit PCM and plays it locally at the WAV sample rate.
+
+The Pi records mono 16-bit PCM, sends the WAV to Vosk, sends the transcript to Ollama, asks
+Piper for speech, and plays the response locally.
 
 ## Development mode
 

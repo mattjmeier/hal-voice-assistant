@@ -91,7 +91,7 @@ class Config:
             wakeword_disabled=_bool("WAKEWORD_DISABLED", False),
             openwakeword_model_path=Path(
                 os.getenv(
-                    "OPENWAKEWORD_MODEL_PATH", "models/openwakeword/hey-hal.onnx"
+                    "OPENWAKEWORD_MODEL_PATH", "models/openwakeword/hey_hal.onnx"
                 ).strip()
             ),
             openwakeword_threshold=_float("OPENWAKEWORD_THRESHOLD", 0.5),

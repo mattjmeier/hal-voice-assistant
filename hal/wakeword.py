@@ -4,7 +4,7 @@ import logging
 import threading
 from pathlib import Path
 
-from hal.audio import _pyaudio, _resolve_device
+from hal.audio import _pyaudio, _resolve_input_stream, resample_pcm
 from hal.config import Config
 
 LOGGER = logging.getLogger(__name__)
@@ -61,23 +61,32 @@ class WakeWordListener:
             model = self._model
             pyaudio = _pyaudio()
             audio = pyaudio.PyAudio()
-            device_index = _resolve_device(self.config, for_input=True, audio=audio)
-            stream = audio.open(
-                format=pyaudio.paInt16,
-                channels=1,
-                rate=self.config.wake_sample_rate,
-                input=True,
-                input_device_index=device_index,
-                frames_per_buffer=FRAME_SAMPLES,
+            stream, device_index, hardware_rate, hardware_frame_size = _resolve_input_stream(
+                self.config,
+                audio=audio,
+                pyaudio=pyaudio,
+                target_rate=self.config.wake_sample_rate,
+                target_frame_size=FRAME_SAMPLES,
             )
             LOGGER.info(
                 "Listening for wake word on audio device %s with model %s",
                 device_index,
                 model_path.name,
             )
+            resample_state = None
+            pending = b""
+            target_bytes = FRAME_SAMPLES * 2
             while stop_requested is None or not stop_requested.is_set():
-                raw = stream.read(FRAME_SAMPLES, exception_on_overflow=False)
-                scores = model.predict(np.frombuffer(raw, dtype=np.int16))
+                raw = stream.read(hardware_frame_size, exception_on_overflow=False)
+                data, resample_state = resample_pcm(
+                    raw, hardware_rate, self.config.wake_sample_rate, resample_state
+                )
+                pending += data
+                if len(pending) < target_bytes:
+                    continue
+                frame = pending[:target_bytes]
+                pending = pending[target_bytes:]
+                scores = model.predict(np.frombuffer(frame, dtype=np.int16))
                 score = max(scores.values(), default=0.0)
                 if score >= self.config.openwakeword_threshold:
                     LOGGER.info("Wake word detected (score %.3f)", score)

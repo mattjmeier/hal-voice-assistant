@@ -16,6 +16,19 @@ class VoskClient:
     def __init__(self, config: Config):
         self.config = config
 
+    def check_connection(self) -> None:
+        websocket = None
+        try:
+            websocket = create_connection(
+                self.config.vosk_url,
+                timeout=self.config.network_timeout_seconds,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Vosk connection check failed: {exc}") from exc
+        finally:
+            if websocket is not None:
+                websocket.close()
+
     def transcribe_wav(self, wav_path: Path) -> str:
         websocket = None
         final_transcripts: list[str] = []
@@ -25,7 +38,15 @@ class VoskClient:
                 self.config.vosk_url,
                 timeout=self.config.network_timeout_seconds,
             )
+            LOGGER.info("Connected to Vosk at %s for %s", self.config.vosk_url, wav_path)
             with wave.open(str(wav_path), "rb") as wav_file:
+                LOGGER.info(
+                    "Sending WAV to Vosk: sample_rate=%d channels=%d width=%d frames=%d",
+                    wav_file.getframerate(),
+                    wav_file.getnchannels(),
+                    wav_file.getsampwidth(),
+                    wav_file.getnframes(),
+                )
                 websocket.send(json.dumps({"config": {"sample_rate": wav_file.getframerate()}}))
                 frames_per_chunk = max(1, int(wav_file.getframerate() * 0.2))
                 while data := wav_file.readframes(frames_per_chunk):

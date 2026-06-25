@@ -21,6 +21,8 @@ class WakeWordListenerTests(unittest.TestCase):
             openwakeword_model_path=self.model_file,
             openwakeword_threshold=0.5,
             wake_sample_rate=16000,
+            audio_input_device_index=None,
+            audio_input_device_name_hint="",
         )
 
     def tearDown(self) -> None:
@@ -34,13 +36,14 @@ class WakeWordListenerTests(unittest.TestCase):
 
         with (
             patch("hal.wakeword._pyaudio", return_value=pyaudio),
-            patch("hal.wakeword._resolve_device", return_value=3),
+            patch("hal.wakeword._resolve_input_stream") as resolve_input_stream,
         ):
             detected = WakeWordListener(self.config).wait_for_wake_word(stop_requested)
 
         self.assertFalse(detected)
         model.predict.assert_not_called()
         pyaudio.PyAudio.assert_not_called()
+        resolve_input_stream.assert_not_called()
 
     def test_detects_score_at_configured_threshold_and_closes_audio(self) -> None:
         model = self._install_model({"hey-hal": 0.7})
@@ -49,7 +52,10 @@ class WakeWordListenerTests(unittest.TestCase):
 
         with (
             patch("hal.wakeword._pyaudio", return_value=pyaudio),
-            patch("hal.wakeword._resolve_device", return_value=3),
+            patch(
+                "hal.wakeword._resolve_input_stream",
+                return_value=(stream, 3, 16000, FRAME_SAMPLES),
+            ) as resolve_input_stream,
         ):
             detected = WakeWordListener(self.config).wait_for_wake_word()
 
@@ -58,17 +64,35 @@ class WakeWordListenerTests(unittest.TestCase):
         samples = model.predict.call_args.args[0]
         self.assertEqual(samples.dtype, np.int16)
         self.assertEqual(len(samples), FRAME_SAMPLES)
-        audio.open.assert_called_once_with(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=16000,
-            input=True,
-            input_device_index=3,
-            frames_per_buffer=FRAME_SAMPLES,
+        resolve_input_stream.assert_called_once_with(
+            self.config,
+            audio=audio,
+            pyaudio=pyaudio,
+            target_rate=16000,
+            target_frame_size=FRAME_SAMPLES,
         )
         stream.stop_stream.assert_called_once()
         stream.close.assert_called_once()
         audio.terminate.assert_called_once()
+
+    def test_resamples_48khz_audio_to_wakeword_rate(self) -> None:
+        model = self._install_model({"hey-hal": 0.7})
+        audio, stream, pyaudio = self._audio()
+        stream.read.return_value = bytes(FRAME_SAMPLES * 3 * 2)
+
+        with (
+            patch("hal.wakeword._pyaudio", return_value=pyaudio),
+            patch(
+                "hal.wakeword._resolve_input_stream",
+                return_value=(stream, 3, 48000, FRAME_SAMPLES * 3),
+            ),
+        ):
+            detected = WakeWordListener(self.config).wait_for_wake_word()
+
+        self.assertTrue(detected)
+        samples = model.predict.call_args.args[0]
+        self.assertEqual(samples.dtype, np.int16)
+        self.assertEqual(len(samples), FRAME_SAMPLES)
 
     def _install_model(self, prediction: dict[str, float]) -> MagicMock:
         model = MagicMock()

@@ -10,6 +10,7 @@ from websocket import create_connection
 from hal.config import Config
 
 LOGGER = logging.getLogger(__name__)
+VOSK_EOF_MESSAGE = '{"eof" : 1}'
 
 
 class VoskClient:
@@ -54,7 +55,7 @@ class VoskClient:
                     latest_partial = self._read_response(
                         websocket.recv(), final_transcripts, latest_partial
                     )
-                websocket.send(json.dumps({"eof": 1}))
+                websocket.send(VOSK_EOF_MESSAGE)
                 latest_partial = self._read_response(
                     websocket.recv(), final_transcripts, latest_partial
                 )

@@ -27,24 +27,32 @@ class PiperClient:
     def __init__(self, config: Config):
         self.config = config
 
+    def _url(self, path: str) -> str:
+        normalized = path if path.startswith("/") else f"/{path}"
+        return f"{self.config.piper_url}{normalized}"
+
     def get_info(self) -> dict:
+        path = getattr(self.config, "piper_info_path", "/voices")
         try:
             response = requests.get(
-                f"{self.config.piper_url}/info",
+                self._url(path),
                 timeout=self.config.network_timeout_seconds,
             )
             response.raise_for_status()
             data = response.json()
         except (ValueError, requests.RequestException) as exc:
-            raise PiperError(f"Piper info request failed: {exc}") from exc
-        if not isinstance(data, dict):
-            raise PiperError("Piper info response was not a JSON object")
-        return data
+            raise PiperError(f"Piper probe request failed: {exc}") from exc
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, list):
+            return {"voices": data}
+        raise PiperError("Piper probe response was not a JSON object or array")
 
     def synthesize(self, text: str) -> PcmAudio:
+        path = getattr(self.config, "piper_synthesize_path", "/")
         try:
             response = requests.post(
-                f"{self.config.piper_url}/synthesize",
+                self._url(path),
                 json={"text": text},
                 timeout=self.config.network_timeout_seconds,
             )

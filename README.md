@@ -240,15 +240,18 @@ VOSK_URL=ws://server:2700
 OLLAMA_URL=http://server:11434/api/generate
 OLLAMA_MODEL=llama3:latest
 PIPER_URL=http://server:5000
+PIPER_INFO_PATH=/voices
+PIPER_SYNTHESIZE_PATH=/
 ```
 
 These URLs must be reachable from the HAL host. If HAL runs on a Pi and the services run on a
 server, do not use `localhost` for `VOSK_URL`, `OLLAMA_URL`, or `PIPER_URL`.
 
-HAL checks Piper with `GET /info` and synthesizes speech with `POST /synthesize` using JSON
-like `{ "text": "..." }`, matching OHF Piper's
-[HTTP API](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_HTTP.md). Piper returns a
-WAV file; HAL extracts its mono 16-bit PCM and plays it locally at the WAV sample rate.
+HAL defaults to the released OHF Piper `piper1-gpl` v1.4.x HTTP shape: it probes with
+`GET /voices` and synthesizes speech with `POST /` using JSON like `{ "text": "..." }`.
+If you run a newer server that exposes different paths, set `PIPER_INFO_PATH` and
+`PIPER_SYNTHESIZE_PATH` accordingly. Piper returns a WAV file; HAL extracts its mono 16-bit PCM
+and plays it locally at the WAV sample rate.
 
 The Pi records mono 16-bit PCM, sends the WAV to Vosk, sends the transcript to Ollama, asks
 Piper for speech, and plays the response locally.

@@ -47,7 +47,7 @@ def main() -> None:
         LOGGER.info("Starting %s in %s mode", config.name, config.mode)
         LOGGER.info("Resolved PIPER_URL=%s", config.piper_url)
         try:
-            LOGGER.info("Piper /info result: %s", tts.get_info())
+            LOGGER.info("Piper probe result: %s", tts.get_info())
         except PiperError as exc:
             LOGGER.warning("%s", exc)
         LOGGER.info("Resolved VOSK_URL=%s", config.vosk_url)

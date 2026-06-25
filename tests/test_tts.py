@@ -13,21 +13,23 @@ class PiperClientTests(unittest.TestCase):
     def setUp(self) -> None:
         self.config = SimpleNamespace(
             piper_url="http://piper.local:5000",
+            piper_info_path="/voices",
+            piper_synthesize_path="/",
             network_timeout_seconds=5,
         )
 
-    def test_get_info_calls_info_endpoint(self) -> None:
+    def test_get_info_calls_released_piper_voices_endpoint(self) -> None:
         response = MagicMock()
-        response.json.return_value = {"voice": "test"}
+        response.json.return_value = [{"name": "test"}]
 
         with patch("hal.tts.requests.get", return_value=response) as get:
             info = PiperClient(self.config).get_info()
 
-        self.assertEqual(info, {"voice": "test"})
-        get.assert_called_once_with("http://piper.local:5000/info", timeout=5)
+        self.assertEqual(info, {"voices": [{"name": "test"}]})
+        get.assert_called_once_with("http://piper.local:5000/voices", timeout=5)
         response.raise_for_status.assert_called_once()
 
-    def test_synthesize_posts_json_and_returns_wav_pcm(self) -> None:
+    def test_synthesize_posts_to_released_piper_root_endpoint(self) -> None:
         response = MagicMock()
         response.content = self._wav_bytes(sample_rate=24000, pcm=b"\x01\x00\x02\x00")
 
@@ -35,7 +37,7 @@ class PiperClientTests(unittest.TestCase):
             audio = PiperClient(self.config).synthesize("Open the pod bay doors.")
 
         post.assert_called_once_with(
-            "http://piper.local:5000/synthesize",
+            "http://piper.local:5000/",
             json={"text": "Open the pod bay doors."},
             timeout=5,
         )

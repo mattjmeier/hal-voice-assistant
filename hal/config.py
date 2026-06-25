@@ -64,6 +64,8 @@ class Config:
     ollama_system: str
     network_timeout_seconds: float
     piper_url: str
+    piper_info_path: str
+    piper_synthesize_path: str
     ha_url: str
     ha_token: str
     ha_language: str
@@ -122,6 +124,8 @@ class Config:
             ),
             network_timeout_seconds=_float("NETWORK_TIMEOUT_SECONDS", 30.0),
             piper_url=os.getenv("PIPER_URL", "http://localhost:5000").rstrip("/"),
+            piper_info_path=os.getenv("PIPER_INFO_PATH", "/voices").strip() or "/voices",
+            piper_synthesize_path=os.getenv("PIPER_SYNTHESIZE_PATH", "/").strip() or "/",
             ha_url=os.getenv("HA_URL", "http://homeassistant.local:8123").rstrip("/"),
             ha_token=os.getenv("HA_TOKEN", "").strip(),
             ha_language=os.getenv("HA_LANGUAGE", "en").strip(),
